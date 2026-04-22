@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v18.2</title>
+    <title>RADAR v18.3</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --gold: #ffcc00; --accent: #ff3b30; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
-        #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; }
-        #map { height: 65vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 15px; }
+        #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
         
-        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        /* Исправленный контейнер карты */
+        #map { flex-grow: 1; min-height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #050505; margin-bottom: 15px; z-index: 1; }
+        
+        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-bottom: 10px; }
         .info-card { background: var(--card); border: 1px solid var(--border); padding: 12px; border-radius: 15px; text-align: center; }
         .info-card b { font-size: 14px; color: var(--blue); display: block; margin-top: 4px; }
         .info-card span { font-size: 8px; opacity: 0.4; text-transform: uppercase; }
         
-        .record-val { color: var(--gold) !important; text-shadow: 0 0 5px rgba(255, 204, 0, 0.3); }
-
+        .record-val { color: var(--gold) !important; }
         .fade-out { transition: opacity 3s ease-out !important; opacity: 0 !important; }
 
         .tornado-marker { 
             font-size: 40px; text-align: center; 
             animation: spin var(--speed, 2s) infinite linear; 
             filter: drop-shadow(0 0 15px red);
-            transition: opacity 3s ease-out;
             cursor: pointer;
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -64,9 +64,13 @@
         return "F4+";
     }
 
-    window.onload = () => {
-        map = L.map('map', { zoomControl: false }).setView([35, -40], 3);
+    // Инициализация карты вынесена отдельно для надежности
+    function initMap() {
+        map = L.map('map', { zoomControl: false, attributionControl: false }).setView([30, -30], 3);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+        
+        // Магическая строчка, чтобы карта не была черной
+        setTimeout(() => { map.invalidateSize(); }, 500);
         
         document.getElementById('top-record').innerText = (localStorage.getItem('tornado_top') || 0) + " КМ/Ч";
 
@@ -75,7 +79,7 @@
 
         update();
         setInterval(update, 10000);
-    };
+    }
 
     async function update() {
         let found = 0;
@@ -95,7 +99,6 @@
                     found++;
                     const fRank = getFujita(wind);
                     
-                    // Обновление рекорда
                     let record = parseInt(localStorage.getItem('tornado_top') || 0);
                     if(wind > record) {
                         localStorage.setItem('tornado_top', wind);
@@ -113,7 +116,7 @@
                         if(obj.marker.getElement()) obj.marker.getElement().classList.remove('fade-out');
                         obj.marker.setLatLng([p.lat, p.lon]);
                         obj.line.setLatLngs(p.history);
-                        obj.marker.getPopup().setContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${fRank}`);
+                        obj.marker.setPopupContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${fRank}`);
                     } else {
                         const m = L.marker([p.lat, p.lon], {
                             icon: L.divIcon({ className: 'none', html: `<div class="tornado-marker">🌪️</div>`, iconSize: [40, 40] })
@@ -136,4 +139,13 @@
                 }
             } catch (e) {}
         }
-        localStorage.setItem('active_history', JSON.stringify(history
+        localStorage.setItem('active_history', JSON.stringify(historyToSave));
+        document.getElementById('obj-val').innerText = found;
+        document.getElementById('wind-val').innerText = topW + " КМ/Ч";
+    }
+
+    // Запуск
+    window.onload = initMap;
+</script>
+</body>
+</html>
