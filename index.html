@@ -3,22 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v18.0</title>
+    <title>RADAR v18.2</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --accent: #ff3b30; --blue: #007aff; --gold: #ffcc00; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --gold: #ffcc00; --accent: #ff3b30; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
         #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; }
-        #map { height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 10px; }
+        #map { height: 65vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 15px; }
         
-        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
-        .info-card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 18px; text-align: center; }
-        .info-card b { font-size: 18px; color: var(--blue); display: block; margin-top: 5px; }
-        .info-card span { font-size: 10px; opacity: 0.4; text-transform: uppercase; }
+        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .info-card { background: var(--card); border: 1px solid var(--border); padding: 12px; border-radius: 15px; text-align: center; }
+        .info-card b { font-size: 14px; color: var(--blue); display: block; margin-top: 4px; }
+        .info-card span { font-size: 8px; opacity: 0.4; text-transform: uppercase; }
+        
+        .record-val { color: var(--gold) !important; text-shadow: 0 0 5px rgba(255, 204, 0, 0.3); }
 
-        /* ПЛАВНОЕ ИСЧЕЗНОВЕНИЕ */
         .fade-out { transition: opacity 3s ease-out !important; opacity: 0 !important; }
 
         .tornado-marker { 
@@ -26,8 +27,12 @@
             animation: spin var(--speed, 2s) infinite linear; 
             filter: drop-shadow(0 0 15px red);
             transition: opacity 3s ease-out;
+            cursor: pointer;
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .leaflet-popup-content-wrapper { background: var(--card); color: #fff; border: 1px solid var(--border); border-radius: 12px; }
+        .leaflet-popup-tip { background: var(--card); }
     </style>
 </head>
 <body>
@@ -36,8 +41,9 @@
     <div id="map"></div>
 
     <div class="info-grid">
+        <div class="info-card"><span>РЕКОРД САЙТА</span><b id="top-record" class="record-val">0 КМ/Ч</b></div>
+        <div class="info-card"><span>MAX ВЕТЕР</span><b id="wind-val">--</b></div>
         <div class="info-card"><span>ОБЪЕКТЫ</span><b id="obj-val">0</b></div>
-        <div class="info-card"><span>MAX ВЕТЕР СЕЙЧАС</span><b id="wind-val">--</b></div>
     </div>
 </div>
 
@@ -50,23 +56,22 @@
         {id: 4, lat: 41.1, lon: -98.2, name: 'Nebraska'}
     ];
 
+    function getFujita(w) {
+        if (w < 117) return "F0";
+        if (w < 181) return "F1";
+        if (w < 253) return "F2";
+        if (w < 332) return "F3";
+        return "F4+";
+    }
+
     window.onload = () => {
         map = L.map('map', { zoomControl: false }).setView([35, -40], 3);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
         
-        // Восстановление истории при обновлении страницы
+        document.getElementById('top-record').innerText = (localStorage.getItem('tornado_top') || 0) + " КМ/Ч";
+
         const savedHistory = JSON.parse(localStorage.getItem('active_history') || '{}');
-        points.forEach(p => { 
-            p.history = savedHistory[p.id] || []; 
-            if (p.history.length > 0) {
-                // Сразу рисуем старый путь
-                const l = L.polyline(p.history, {color: 'red', weight: 2, opacity: 0.6}).addTo(map);
-                const m = L.marker(p.history[p.history.length-1], {
-                    icon: L.divIcon({ className: 'none', html: `<div class="tornado-marker">🌪️</div>`, iconSize: [40, 40] })
-                }).addTo(map);
-                activeTornadoes[p.id] = { marker: m, line: l };
-            }
-        });
+        points.forEach(p => { p.history = savedHistory[p.id] || []; });
 
         update();
         setInterval(update, 10000);
@@ -75,7 +80,7 @@
     async function update() {
         let found = 0;
         let topW = 0;
-        let currentHistory = {};
+        let historyToSave = {};
 
         for (let p of points) {
             try {
@@ -88,40 +93,38 @@
 
                 if (wind > 30) { 
                     found++;
+                    const fRank = getFujita(wind);
+                    
+                    // Обновление рекорда
+                    let record = parseInt(localStorage.getItem('tornado_top') || 0);
+                    if(wind > record) {
+                        localStorage.setItem('tornado_top', wind);
+                        document.getElementById('top-record').innerText = wind + " КМ/Ч";
+                    }
+
                     const rad = angle * (Math.PI / 180);
                     p.lat += Math.cos(rad) * 0.02;
                     p.lon += Math.sin(rad) * 0.02;
                     p.history.push([p.lat, p.lon]);
-                    if(p.history.length > 50) p.history.shift();
+                    if(p.history.length > 40) p.history.shift();
 
                     if (activeTornadoes[p.id]) {
                         const obj = activeTornadoes[p.id];
-                        // Отменяем исчезновение, если торнадо снова в силе
                         if(obj.marker.getElement()) obj.marker.getElement().classList.remove('fade-out');
-                        if(obj.line.getElement()) obj.line.getElement().style.opacity = "0.6";
-                        
                         obj.marker.setLatLng([p.lat, p.lon]);
                         obj.line.setLatLngs(p.history);
+                        obj.marker.getPopup().setContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${fRank}`);
                     } else {
                         const m = L.marker([p.lat, p.lon], {
                             icon: L.divIcon({ className: 'none', html: `<div class="tornado-marker">🌪️</div>`, iconSize: [40, 40] })
-                        }).addTo(map);
+                        }).addTo(map).bindPopup(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${fRank}`);
                         const l = L.polyline(p.history, {color: 'red', weight: 2, opacity: 0.6}).addTo(map);
                         activeTornadoes[p.id] = { marker: m, line: l };
                     }
-                    currentHistory[p.id] = p.history;
+                    historyToSave[p.id] = p.history;
                 } else if (activeTornadoes[p.id]) {
-                    // ПЛАВНОЕ УДАЛЕНИЕ
                     const obj = activeTornadoes[p.id];
-                    const mEl = obj.marker.getElement();
-                    const lEl = obj.line.getElement();
-
-                    if (mEl) mEl.classList.add('fade-out');
-                    if (lEl) {
-                        lEl.style.transition = "opacity 3s ease-out";
-                        lEl.style.opacity = "0";
-                    }
-
+                    if (obj.marker.getElement()) obj.marker.getElement().classList.add('fade-out');
                     setTimeout(() => {
                         if (activeTornadoes[p.id] && wind <= 30) {
                             map.removeLayer(obj.marker);
@@ -129,18 +132,8 @@
                             delete activeTornadoes[p.id];
                         }
                     }, 3000);
-                    
                     p.history = [];
                 }
             } catch (e) {}
         }
-        
-        // Сохраняем активные пути в память
-        localStorage.setItem('active_history', JSON.stringify(currentHistory));
-        
-        document.getElementById('obj-val').innerText = found;
-        document.getElementById('wind-val').innerText = topW + " КМ/Ч";
-    }
-</script>
-</body>
-</html>
+        localStorage.setItem('active_history', JSON.stringify(history
