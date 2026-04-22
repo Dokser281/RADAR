@@ -3,29 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v17.2</title>
+    <title>RADAR v18.0</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --accent: #ff3b30; --blue: #007aff; --gold: #ffcc00; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --accent: #ff3b30; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
         #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; }
-        #map { height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 10px; }
+        #map { height: 75vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 15px; }
         
-        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
-        .info-card { background: var(--card); border: 1px solid var(--border); padding: 12px; border-radius: 15px; text-align: center; }
-        .info-card b { font-size: 14px; color: var(--blue); display: block; margin-top: 4px; }
-        .info-card span { font-size: 8px; opacity: 0.4; text-transform: uppercase; }
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .info-card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 18px; text-align: center; }
+        .info-card b { font-size: 18px; color: var(--blue); display: block; margin-top: 5px; }
+        .info-card span { font-size: 10px; opacity: 0.4; text-transform: uppercase; }
 
-        /* СТИЛЬ РЕКОРДА */
-        .record-val { color: var(--gold) !important; font-weight: 900; }
-        
-        .tornado-marker { font-size: 40px; animation: spin var(--speed, 2s) infinite linear; filter: drop-shadow(0 0 15px red); }
+        /* ПЛАВНОЕ ИСЧЕЗНОВЕНИЕ */
+        .fade-out { transition: opacity 3s ease-out !important; opacity: 0 !important; }
+
+        .tornado-marker { 
+            font-size: 40px; text-align: center; 
+            animation: spin var(--speed, 2s) infinite linear; 
+            filter: drop-shadow(0 0 15px red);
+            transition: opacity 3s ease-out;
+        }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        .btn-clear { background: none; border: none; color: var(--accent); font-size: 8px; cursor: pointer; opacity: 0.5; margin-top: 5px; }
-        .btn-clear:hover { opacity: 1; }
     </style>
 </head>
 <body>
@@ -34,75 +36,37 @@
     <div id="map"></div>
 
     <div class="info-grid">
-        <div class="info-card">
-            <span>РЕКОРД СКОРОСТИ</span>
-            <b id="top-record" class="record-val">0 КМ/Ч</b>
-        </div>
-        <div class="info-card">
-            <span>MAX ВЕТЕР СЕЙЧАС</span>
-            <b id="wind-val">--</b>
-        </div>
-        <div class="info-card">
-            <span>АРХИВ ПУТЕЙ</span>
-            <b id="archive-count">0</b>
-            <button class="btn-clear" onclick="clearAll()">СБРОСИТЬ ВСЕ</button>
-        </div>
+        <div class="info-card"><span>ОБЪЕКТЫ</span><b id="obj-val">0</b></div>
+        <div class="info-card"><span>MAX ВЕТЕР СЕЙЧАС</span><b id="wind-val">--</b></div>
     </div>
 </div>
 
 <script>
     let map, activeTornadoes = {};
     const points = [
-        {id: 1, lat: 35.4, lon: -97.5, name: 'Oklahoma', history: []}, 
-        {id: 2, lat: 49.9, lon: 36.2, name: 'Kharkiv', history: []}, 
-        {id: 3, lat: 31.9, lon: -99.9, name: 'Texas', history: []},
-        {id: 4, lat: 41.1, lon: -98.2, name: 'Nebraska', history: []}
+        {id: 1, lat: 35.4, lon: -97.5, name: 'Oklahoma'}, 
+        {id: 2, lat: 49.9, lon: 36.2, name: 'Kharkiv'}, 
+        {id: 3, lat: 31.9, lon: -99.9, name: 'Texas'},
+        {id: 4, lat: 41.1, lon: -98.2, name: 'Nebraska'}
     ];
 
     window.onload = () => {
-        map = L.map('map', { zoomControl: false }).setView([30, -30], 3);
+        map = L.map('map', { zoomControl: false }).setView([35, -40], 3);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
         
-        // Загружаем рекорд и архив
-        document.getElementById('top-record').innerText = (localStorage.getItem('tornado_top') || 0) + " КМ/Ч";
-        loadArchive();
+        // Загружаем сохраненные пути активных торнадо
+        const savedHistory = JSON.parse(localStorage.getItem('active_history') || '{}');
+        points.forEach(p => { p.history = savedHistory[p.id] || []; });
+
         update();
         setInterval(update, 10000);
     };
 
-    function saveToArchive(path) {
-        let archive = JSON.parse(localStorage.getItem('tornado_archive') || '[]');
-        archive.push(path);
-        if(archive.length > 20) archive.shift(); 
-        localStorage.setItem('tornado_archive', JSON.stringify(archive));
-        document.getElementById('archive-count').innerText = archive.length;
-    }
-
-    function loadArchive() {
-        const archive = JSON.parse(localStorage.getItem('tornado_archive') || '[]');
-        document.getElementById('archive-count').innerText = archive.length;
-        archive.forEach(coords => {
-            L.polyline(coords, {color: '#333', weight: 1, opacity: 0.3}).addTo(map);
-        });
-    }
-
-    function updateRecord(currentWind) {
-        let top = parseInt(localStorage.getItem('tornado_top') || 0);
-        if (currentWind > top) {
-            localStorage.setItem('tornado_top', currentWind);
-            document.getElementById('top-record').innerText = currentWind + " КМ/Ч";
-        }
-    }
-
-    function clearAll() {
-        if(confirm('Удалить рекорд и все пути?')) {
-            localStorage.clear();
-            location.reload();
-        }
-    }
-
     async function update() {
+        let found = 0;
         let topW = 0;
+        let currentHistory = {};
+
         for (let p of points) {
             try {
                 const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&current=wind_gusts_10m,wind_direction_10m&_=${Date.now()}`);
@@ -113,32 +77,59 @@
                 if (wind > topW) topW = wind;
 
                 if (wind > 30) { 
-                    updateRecord(wind); // Проверяем на новый рекорд
-
+                    found++;
                     const rad = angle * (Math.PI / 180);
                     p.lat += Math.cos(rad) * 0.02;
                     p.lon += Math.sin(rad) * 0.02;
                     p.history.push([p.lat, p.lon]);
+                    if(p.history.length > 30) p.history.shift();
 
                     if (activeTornadoes[p.id]) {
-                        activeTornadoes[p.id].marker.setLatLng([p.lat, p.lon]);
-                        activeTornadoes[p.id].line.setLatLngs(p.history);
+                        // Если торнадо был в процессе удаления — отменяем удаление
+                        const obj = activeTornadoes[p.id];
+                        obj.marker.getElement().classList.remove('fade-out');
+                        obj.line.getElement().classList.remove('fade-out');
+                        
+                        obj.marker.setLatLng([p.lat, p.lon]);
+                        obj.line.setLatLngs(p.history);
                     } else {
                         const m = L.marker([p.lat, p.lon], {
                             icon: L.divIcon({ className: 'none', html: `<div class="tornado-marker">🌪️</div>`, iconSize: [40, 40] })
                         }).addTo(map);
-                        const l = L.polyline(p.history, {color: 'red', weight: 2}).addTo(map);
+                        const l = L.polyline(p.history, {color: 'red', weight: 2, opacity: 0.6}).addTo(map);
                         activeTornadoes[p.id] = { marker: m, line: l };
                     }
+                    currentHistory[p.id] = p.history;
                 } else if (activeTornadoes[p.id]) {
-                    saveToArchive(p.history);
-                    map.removeLayer(activeTornadoes[p.id].marker);
-                    map.removeLayer(activeTornadoes[p.id].line);
-                    delete activeTornadoes[p.id];
+                    // ПЛАВНОЕ УДАЛЕНИЕ
+                    const obj = activeTornadoes[p.id];
+                    const mEl = obj.marker.getElement();
+                    const lEl = obj.line.getElement();
+
+                    if (mEl) mEl.classList.add('fade-out');
+                    if (lEl) {
+                        lEl.style.transition = "opacity 3s ease-out";
+                        lEl.style.opacity = "0";
+                    }
+
+                    // Окончательное удаление из памяти через 3 секунды
+                    setTimeout(() => {
+                        if (activeTornadoes[p.id] && wind <= 30) {
+                            map.removeLayer(obj.marker);
+                            map.removeLayer(obj.line);
+                            delete activeTornadoes[p.id];
+                        }
+                    }, 3000);
+                    
                     p.history = [];
                 }
             } catch (e) {}
         }
+        
+        // Сохраняем текущие пути в LocalStorage
+        localStorage.setItem('active_history', JSON.stringify(currentHistory));
+        
+        document.getElementById('obj-val').innerText = found;
         document.getElementById('wind-val').innerText = topW + " КМ/Ч";
     }
 </script>
