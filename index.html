@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --accent: #ff3b30; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --accent: #ff3b30; --blue: #007aff; --gold: #ffcc00; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         
         #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; }
-        #map { height: 75vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 15px; }
+        #map { height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #000; margin-bottom: 10px; }
         
-        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
         .info-card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 18px; text-align: center; }
         .info-card b { font-size: 18px; color: var(--blue); display: block; margin-top: 5px; }
         .info-card span { font-size: 10px; opacity: 0.4; text-transform: uppercase; }
@@ -54,9 +54,19 @@
         map = L.map('map', { zoomControl: false }).setView([35, -40], 3);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
         
-        // Загружаем сохраненные пути активных торнадо
+        // Восстановление истории при обновлении страницы
         const savedHistory = JSON.parse(localStorage.getItem('active_history') || '{}');
-        points.forEach(p => { p.history = savedHistory[p.id] || []; });
+        points.forEach(p => { 
+            p.history = savedHistory[p.id] || []; 
+            if (p.history.length > 0) {
+                // Сразу рисуем старый путь
+                const l = L.polyline(p.history, {color: 'red', weight: 2, opacity: 0.6}).addTo(map);
+                const m = L.marker(p.history[p.history.length-1], {
+                    icon: L.divIcon({ className: 'none', html: `<div class="tornado-marker">🌪️</div>`, iconSize: [40, 40] })
+                }).addTo(map);
+                activeTornadoes[p.id] = { marker: m, line: l };
+            }
+        });
 
         update();
         setInterval(update, 10000);
@@ -82,13 +92,13 @@
                     p.lat += Math.cos(rad) * 0.02;
                     p.lon += Math.sin(rad) * 0.02;
                     p.history.push([p.lat, p.lon]);
-                    if(p.history.length > 30) p.history.shift();
+                    if(p.history.length > 50) p.history.shift();
 
                     if (activeTornadoes[p.id]) {
-                        // Если торнадо был в процессе удаления — отменяем удаление
                         const obj = activeTornadoes[p.id];
-                        obj.marker.getElement().classList.remove('fade-out');
-                        obj.line.getElement().classList.remove('fade-out');
+                        // Отменяем исчезновение, если торнадо снова в силе
+                        if(obj.marker.getElement()) obj.marker.getElement().classList.remove('fade-out');
+                        if(obj.line.getElement()) obj.line.getElement().style.opacity = "0.6";
                         
                         obj.marker.setLatLng([p.lat, p.lon]);
                         obj.line.setLatLngs(p.history);
@@ -112,7 +122,6 @@
                         lEl.style.opacity = "0";
                     }
 
-                    // Окончательное удаление из памяти через 3 секунды
                     setTimeout(() => {
                         if (activeTornadoes[p.id] && wind <= 30) {
                             map.removeLayer(obj.marker);
@@ -126,7 +135,7 @@
             } catch (e) {}
         }
         
-        // Сохраняем текущие пути в LocalStorage
+        // Сохраняем активные пути в память
         localStorage.setItem('active_history', JSON.stringify(currentHistory));
         
         document.getElementById('obj-val').innerText = found;
