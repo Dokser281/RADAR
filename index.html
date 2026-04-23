@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v19.1</title>
+    <title>RADAR v19.4</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -15,7 +15,7 @@
         .info-card { background: var(--card); border: 1px solid var(--border); padding: 12px; border-radius: 15px; text-align: center; }
         .info-card b { font-size: 14px; color: var(--blue); display: block; margin-top: 4px; }
         .info-card span { font-size: 8px; opacity: 0.4; text-transform: uppercase; }
-        .tornado-marker { text-align: center; animation: spin 0.8s infinite linear; filter: drop-shadow(0 0 15px red); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .tornado-marker { text-align: center; animation: spin 0.8s infinite linear; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .leaflet-popup-content-wrapper { background: var(--card); color: #fff; border: 1px solid var(--border); border-radius: 12px; }
     </style>
@@ -40,18 +40,20 @@
     ];
 
     const fSettings = {
-        "F1": { size: 40, color: "#ffff00" },
-        "F2": { size: 50, color: "#ff9900" },
-        "F3": { size: 65, color: "#ff3300" },
-        "F4": { size: 80, color: "#ff0000" },
-        "F5": { size: 100, color: "#9900ff" }
+        "Формируется": { size: 25, color: "#888", shadow: "none" },
+        "F1": { size: 40, color: "#ffff00", shadow: "0 0 15px yellow" },
+        "F2": { size: 50, color: "#ff9900", shadow: "0 0 15px orange" },
+        "F3": { size: 65, color: "#ff3300", shadow: "0 0 15px red" },
+        "F4": { size: 80, color: "#ff0000", shadow: "0 0 20px red" },
+        "F5": { size: 100, color: "#9900ff", shadow: "0 0 25px purple" }
     };
 
     function getF(w) {
-        if (w < 181) return "F1"; 
-        if (w < 253) return "F2";
-        if (w < 332) return "F3";
-        if (w < 418) return "F4";
+        if (w < 45) return "Формируется";
+        if (w < 67) return "F1";
+        if (w < 90) return "F2";
+        if (w < 120) return "F3";
+        if (w < 160) return "F4";
         return "F5";
     }
 
@@ -89,7 +91,7 @@
                 const angle = data.current.wind_direction_10m;
                 if (wind > maxW) maxW = wind;
 
-                if (wind > 30) {
+                if (wind >= 30) {
                     found++;
                     const rad = (angle - 90) * (Math.PI / 180);
                     p.vx = -Math.sin(rad) * 0.0000005;
@@ -102,14 +104,19 @@
                         const m = L.marker([p.lat, p.lon], {
                             icon: L.divIcon({ 
                                 className: 'none', 
-                                html: `<div class="tornado-marker" style="font-size: ${config.size}px">🌪️</div>`, 
+                                html: `<div class="tornado-marker" style="font-size: ${config.size}px; filter: drop-shadow(${config.shadow})">🌪️</div>`, 
                                 iconSize: [config.size, config.size] 
                             })
-                        }).addTo(map).bindPopup(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${f}`);
+                        }).addTo(map).bindPopup(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Статус: ${f}`);
                         const l = L.polyline(p.history, {color: config.color, weight: 3, opacity: 0.6}).addTo(map);
                         activeTornadoes[p.id] = { marker: m, line: l };
                     } else {
-                        activeTornadoes[p.id].marker.setPopupContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${f}`);
+                        activeTornadoes[p.id].marker.setPopupContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Статус: ${f}`);
+                        activeTornadoes[p.id].marker.setIcon(L.divIcon({ 
+                            className: 'none', 
+                            html: `<div class="tornado-marker" style="font-size: ${config.size}px; filter: drop-shadow(${config.shadow})">🌪️</div>`, 
+                            iconSize: [config.size, config.size] 
+                        }));
                         activeTornadoes[p.id].line.setStyle({color: config.color});
                     }
                 } else if (activeTornadoes[p.id]) {
