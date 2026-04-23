@@ -3,30 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v18.8</title>
+    <title>RADAR v19.1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --gold: #ffcc00; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
         #map { flex-grow: 1; min-height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #050505; margin-bottom: 15px; }
-        
-        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-bottom: 10px; }
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding-bottom: 10px; }
         .info-card { background: var(--card); border: 1px solid var(--border); padding: 12px; border-radius: 15px; text-align: center; }
         .info-card b { font-size: 14px; color: var(--blue); display: block; margin-top: 4px; }
         .info-card span { font-size: 8px; opacity: 0.4; text-transform: uppercase; }
-        
-        /* ДИНАМИЧЕСКИЙ РАЗМЕР И ЦВЕТ */
-        .tornado-marker { 
-            text-align: center; 
-            animation: spin 0.8s infinite linear; 
-            filter: drop-shadow(0 0 15px red); 
-            cursor: pointer; 
-            display: flex; align-items: center; justify-content: center;
-        }
+        .tornado-marker { text-align: center; animation: spin 0.8s infinite linear; filter: drop-shadow(0 0 15px red); cursor: pointer; display: flex; align-items: center; justify-content: center; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        
         .leaflet-popup-content-wrapper { background: var(--card); color: #fff; border: 1px solid var(--border); border-radius: 12px; }
     </style>
 </head>
@@ -35,7 +25,6 @@
 <div id="main-ui">
     <div id="map"></div>
     <div class="info-grid">
-        <div class="info-card"><span>РЕКОРД</span><b id="top-record" style="color:var(--gold)">0 КМ/Ч</b></div>
         <div class="info-card"><span>MAX ВЕТЕР</span><b id="wind-val">--</b></div>
         <div class="info-card"><span>ОБЪЕКТЫ</span><b id="obj-val">0</b></div>
     </div>
@@ -50,9 +39,7 @@
         {id: 4, lat: 41.1, lon: -98.2, name: 'Nebraska', vx: 0, vy: 0}
     ];
 
-    // Настройка цвета и размера по шкале Фудзиты
     const fSettings = {
-        "F0": { size: 30, color: "#ffffff" },
         "F1": { size: 40, color: "#ffff00" },
         "F2": { size: 50, color: "#ff9900" },
         "F3": { size: 65, color: "#ff3300" },
@@ -61,16 +48,17 @@
     };
 
     function getF(w) {
-        if (w < 117) return "F0"; if (w < 181) return "F1";
-        if (w < 253) return "F2"; if (w < 332) return "F3";
-        if (w < 418) return "F4"; return "F5";
+        if (w < 181) return "F1"; 
+        if (w < 253) return "F2";
+        if (w < 332) return "F3";
+        if (w < 418) return "F4";
+        return "F5";
     }
 
     function initMap() {
         map = L.map('map', { zoomControl: false, attributionControl: false }).setView([35, -95], 4);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
         setTimeout(() => { map.invalidateSize(); }, 500);
-        document.getElementById('top-record').innerText = (localStorage.getItem('tornado_top') || 0) + " КМ/Ч";
         requestAnimationFrame(smoothMove);
         updateData();
         setInterval(updateData, 15000);
@@ -81,7 +69,6 @@
             if (activeTornadoes[p.id]) {
                 p.lat += p.vx; p.lon += p.vy;
                 activeTornadoes[p.id].marker.setLatLng([p.lat, p.lon]);
-                
                 if (Math.random() > 0.9) {
                     p.history.push([p.lat, p.lon]);
                     if(p.history.length > 50) p.history.shift();
@@ -107,7 +94,6 @@
                     const rad = (angle - 90) * (Math.PI / 180);
                     p.vx = -Math.sin(rad) * 0.0000005;
                     p.vy = Math.cos(rad) * 0.0000005;
-                    
                     const f = getF(wind);
                     const config = fSettings[f];
 
@@ -120,14 +106,16 @@
                                 iconSize: [config.size, config.size] 
                             })
                         }).addTo(map).bindPopup(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${f}`);
-                        
                         const l = L.polyline(p.history, {color: config.color, weight: 3, opacity: 0.6}).addTo(map);
                         activeTornadoes[p.id] = { marker: m, line: l };
                     } else {
-                        // Обновляем попап и стиль если ранг изменился
                         activeTornadoes[p.id].marker.setPopupContent(`<b>${p.name}</b><br>Скорость: ${wind} км/ч<br>Ранг: ${f}`);
                         activeTornadoes[p.id].line.setStyle({color: config.color});
                     }
+                } else if (activeTornadoes[p.id]) {
+                    map.removeLayer(activeTornadoes[p.id].marker);
+                    map.removeLayer(activeTornadoes[p.id].line);
+                    delete activeTornadoes[p.id];
                 }
             } catch (e) {}
         }
