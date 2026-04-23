@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RADAR v19.4</title>
+    <title>RADAR v19.7</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --blue: #007aff; --gold: #ffcc00; }
         body { margin: 0; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         #main-ui { width: 100%; max-width: 900px; margin: 0 auto; padding: 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
         #map { flex-grow: 1; min-height: 60vh; border-radius: 20px; border: 1px solid var(--border); background: #050505; margin-bottom: 15px; }
@@ -25,13 +25,15 @@
 <div id="main-ui">
     <div id="map"></div>
     <div class="info-grid">
-        <div class="info-card"><span>MAX ВЕТЕР</span><b id="wind-val">--</b></div>
+        <div class="info-card"><span>РЕКОРД ЗА ИСТОРИЮ САЙТА</span><b id="record-val" style="color:var(--gold)">0 КМ/Ч</b></div>
         <div class="info-card"><span>ОБЪЕКТЫ</span><b id="obj-val">0</b></div>
     </div>
 </div>
 
 <script>
     let map, activeTornadoes = {};
+    let globalRecord = localStorage.getItem('tornado_max_record') || 0;
+
     const points = [
         {id: 1, lat: 35.4, lon: -97.5, name: 'Oklahoma', vx: 0, vy: 0}, 
         {id: 2, lat: 49.9, lon: 36.2, name: 'Kharkiv', vx: 0, vy: 0}, 
@@ -60,6 +62,7 @@
     function initMap() {
         map = L.map('map', { zoomControl: false, attributionControl: false }).setView([35, -95], 4);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+        document.getElementById('record-val').innerText = globalRecord + " КМ/Ч";
         setTimeout(() => { map.invalidateSize(); }, 500);
         requestAnimationFrame(smoothMove);
         updateData();
@@ -82,14 +85,15 @@
     }
 
     async function updateData() {
-        let found = 0; let maxW = 0;
+        let found = 0; let currentMax = 0;
         for (let p of points) {
             try {
                 const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&current=wind_gusts_10m,wind_direction_10m&_=${Date.now()}`);
                 const data = await res.json();
                 const wind = Math.round(data.current.wind_gusts_10m);
                 const angle = data.current.wind_direction_10m;
-                if (wind > maxW) maxW = wind;
+                
+                if (wind > currentMax) currentMax = wind;
 
                 if (wind >= 30) {
                     found++;
@@ -126,8 +130,14 @@
                 }
             } catch (e) {}
         }
+        
+        if (currentMax > globalRecord) {
+            globalRecord = currentMax;
+            localStorage.setItem('tornado_max_record', globalRecord);
+            document.getElementById('record-val').innerText = globalRecord + " КМ/Ч";
+        }
+
         document.getElementById('obj-val').innerText = found;
-        document.getElementById('wind-val').innerText = maxW + " КМ/Ч";
     }
     window.onload = initMap;
 </script>
